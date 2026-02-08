@@ -6,6 +6,7 @@ import { TrendingUp, TrendingDown, Users, DollarSign, Target, Clock, MoreVertica
 import { StatCard } from './components/StatCard';
 import { ActivityFeedItem } from './components/ActivityFeedItem';
 import { PipelineAlertsModal } from './components/PipelineAlertsModal';
+import { AIMetricsSection } from './components/AIMetricsSection';
 import { useDashboardMetrics, PeriodFilter, COMPARISON_LABELS } from './hooks/useDashboardMetrics';
 import { PeriodFilterSelect } from '@/components/filters/PeriodFilterSelect';
 import { LazyFunnelChart, ChartWrapper } from '@/components/charts';
@@ -272,6 +273,9 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* AI Performance Section */}
+      <AIMetricsSection />
 
       {/* Auto-Resize Bottom Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-[300px]">
