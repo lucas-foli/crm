@@ -40,6 +40,7 @@ import {
   useDeleteChannelMutation,
   useToggleChannelStatusMutation,
 } from '@/lib/query/hooks/useChannelsQuery';
+import { useEnableWhatsAppCallingMutation } from '@/lib/query/hooks/useWhatsAppCallingQuery';
 import {
   type MessagingChannel,
   type ChannelType,
@@ -516,6 +517,68 @@ function ChannelCard({
               </div>
             )}
           </div>
+        )}
+      </div>
+
+      {/* Calling Section - WhatsApp Meta Cloud only */}
+      {channel.provider === 'meta-cloud' && channel.channelType === 'whatsapp' && (
+        <CallingToggle channel={channel} />
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// CALLING TOGGLE (WhatsApp meta-cloud)
+// =============================================================================
+
+function CallingToggle({ channel }: { channel: MessagingChannel }) {
+  const { addToast } = useToast();
+  const enableCalling = useEnableWhatsAppCallingMutation();
+  const callingEnabled = !!(channel.settings as any)?.callingEnabled;
+
+  const handleEnable = async () => {
+    try {
+      await enableCalling.mutateAsync({ channelId: channel.id });
+      addToast('Chamadas WhatsApp habilitadas', 'success');
+    } catch (err) {
+      addToast(
+        err instanceof Error ? err.message : 'Erro ao habilitar chamadas',
+        'error'
+      );
+    }
+  };
+
+  return (
+    <div className="border-t border-slate-100 dark:border-white/5 px-4 py-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Phone className="w-4 h-4 text-green-500" />
+          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+            Chamadas
+          </span>
+          {callingEnabled ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300">
+              Ativo
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400">
+              Desativado
+            </span>
+          )}
+        </div>
+        {!callingEnabled && (
+          <button
+            type="button"
+            onClick={handleEnable}
+            disabled={enableCalling.isPending}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium
+              bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20
+              text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-500/20
+              transition-colors disabled:opacity-50"
+          >
+            {enableCalling.isPending ? 'Habilitando...' : 'Habilitar'}
+          </button>
         )}
       </div>
     </div>

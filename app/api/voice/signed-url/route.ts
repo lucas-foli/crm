@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
       const { data: contact } = deal.contact_id
         ? await supabase
             .from('contacts')
-            .select('name, company')
+            .select('name, company_name')
             .eq('id', deal.contact_id)
             .single()
         : { data: null };
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
       const stageData = dealFull?.stage as unknown as { name: string } | null;
 
       dynamicVariables = buildDynamicVariables({
-        contact: contact ? { name: contact.name, company: contact.company } : null,
+        contact: contact ? { name: contact.name, company: contact.company_name } : null,
         deal: {
           stage_name: stageData?.name || 'Novo Lead',
           value: dealFull?.value ?? null,

@@ -188,8 +188,7 @@ export function useProvisionStagesMutation() {
       return response.json();
     },
     onSuccess: () => {
-      // Invalidate stage AI config queries
-      queryClient.invalidateQueries({ queryKey: ['stage-ai-config'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai.all });
     },
   });
 }

@@ -204,6 +204,10 @@ export const queryKeys = {
         calls: (dealId: string) => ['voice', 'calls', dealId] as const,
         /** Single voice call */
         call: (callId: string) => ['voice', 'call', callId] as const,
+        /** WhatsApp calling: call permission for a contact */
+        callPermission: (contactId: string) => ['voice', 'callPermission', contactId] as const,
+        /** WhatsApp calling: active call */
+        activeCall: () => ['voice', 'activeCall'] as const,
     },
 };
 

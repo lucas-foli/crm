@@ -77,13 +77,20 @@ export async function GET() {
     });
   }
 
+  // Mask API keys for admin response (show last 4 chars only)
+  const maskKey = (key: string | null | undefined): string => {
+    if (!key) return '';
+    if (key.length <= 8) return '••••••••';
+    return '••••••••' + key.slice(-4);
+  };
+
   return json({
     aiEnabled,
     aiProvider: (orgSettings?.ai_provider || 'google') as Provider,
     aiModel: orgSettings?.ai_model || AI_DEFAULT_MODELS.google,
-    aiGoogleKey: orgSettings?.ai_google_key || '',
-    aiOpenaiKey: orgSettings?.ai_openai_key || '',
-    aiAnthropicKey: orgSettings?.ai_anthropic_key || '',
+    aiGoogleKey: maskKey(orgSettings?.ai_google_key),
+    aiOpenaiKey: maskKey(orgSettings?.ai_openai_key),
+    aiAnthropicKey: maskKey(orgSettings?.ai_anthropic_key),
     aiHasGoogleKey: Boolean(orgSettings?.ai_google_key),
     aiHasOpenaiKey: Boolean(orgSettings?.ai_openai_key),
     aiHasAnthropicKey: Boolean(orgSettings?.ai_anthropic_key),

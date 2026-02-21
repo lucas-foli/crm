@@ -85,7 +85,7 @@ export async function GET() {
       updated_at
     `
     )
-    .or(`is_system.eq.true,organization_id.eq.${profile.organization_id}`)
+    .or(`is_system.eq.true,organization_id.eq.${profile.organization_id.replace(/[,.()*\\]/g, '')}`)
     .order('is_system', { ascending: false })
     .order('created_at', { ascending: true });
 

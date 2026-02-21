@@ -83,7 +83,7 @@ export async function GET(_req: Request, context: RouteContext) {
     .from('ai_qualification_templates')
     .select('*')
     .eq('id', id)
-    .or(`is_system.eq.true,organization_id.eq.${profile.organization_id}`)
+    .or(`is_system.eq.true,organization_id.eq.${profile.organization_id.replace(/[,()]/g, '')}`)
     .single();
 
   if (error || !template) {

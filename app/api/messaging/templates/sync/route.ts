@@ -127,21 +127,21 @@ export async function POST(req: Request) {
       updated_at: now,
     }));
 
-    // Upsert usando external_id + channel_id como chave
-    let syncedCount = 0;
-    for (const template of upsertData) {
-      const { error: upsertError } = await supabase
-        .from('messaging_templates')
-        .upsert(template, {
-          onConflict: 'channel_id,name,language',
-        });
-
-      if (!upsertError) {
-        syncedCount++;
-      } else {
-        console.error('Error upserting template:', upsertError, template.name);
-      }
-    }
+    // Upsert em paralelo usando external_id + channel_id como chave
+    const upsertResults = await Promise.all(
+      upsertData.map((template) =>
+        supabase
+          .from('messaging_templates')
+          .upsert(template, { onConflict: 'channel_id,name,language' })
+          .then(({ error }) => {
+            if (error) {
+              console.error('Error upserting template:', error, template.name);
+            }
+            return !error;
+          })
+      )
+    );
+    const syncedCount = upsertResults.filter(Boolean).length;
 
     // Buscar templates atualizados
     const { data: savedTemplates } = await supabase

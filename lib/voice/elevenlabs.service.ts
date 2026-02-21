@@ -72,31 +72,31 @@ export async function createOrgAgent(
   apiKey: string,
   params: CreateAgentParams
 ): Promise<string> {
-  const result = await elevenLabsFetch<{ agentId: string }>(
+  const result = await elevenLabsFetch<{ agent_id: string }>(
     apiKey,
     '/convai/agents/create',
     {
       method: 'POST',
       body: JSON.stringify({
         name: params.name,
-        conversationConfig: {
+        conversation_config: {
           agent: {
             prompt: {
               prompt: params.systemPrompt,
             },
-            firstMessage: params.firstMessage,
+            first_message: params.firstMessage,
             language: params.language || DEFAULT_LANGUAGE,
           },
           tts: {
-            voiceId: params.voiceId || DEFAULT_VOICE_ID,
-            modelId: DEFAULT_TTS_MODEL,
+            voice_id: params.voiceId || DEFAULT_VOICE_ID,
+            model_id: DEFAULT_TTS_MODEL,
           },
         },
       }),
     }
   );
 
-  return result.agentId;
+  return result.agent_id;
 }
 
 /**
@@ -111,10 +111,10 @@ export async function updateAgentPrompt(
   await elevenLabsFetch(apiKey, `/convai/agents/${agentId}`, {
     method: 'PATCH',
     body: JSON.stringify({
-      conversationConfig: {
+      conversation_config: {
         agent: {
           prompt: { prompt: systemPrompt },
-          ...(firstMessage ? { firstMessage } : {}),
+          ...(firstMessage ? { first_message: firstMessage } : {}),
         },
       },
     }),

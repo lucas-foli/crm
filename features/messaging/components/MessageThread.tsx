@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { MessageSquare } from 'lucide-react';
+import { Loader2, MessageSquare } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
-import { useMessages } from '@/lib/query/hooks/useMessagesQuery';
+import { useMessagesInfinite } from '@/lib/query/hooks/useMessagesQuery';
 import type { MessagingMessage } from '@/lib/messaging/types';
 
 interface MessageThreadProps {
@@ -36,20 +36,70 @@ function DateDivider({ date }: { date: Date }) {
 }
 
 export function MessageThread({ conversationId }: MessageThreadProps) {
-  const { data: messages, isLoading, error } = useMessages(conversationId);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const prevMessagesLengthRef = useRef(0);
+  const {
+    data,
+    isLoading,
+    error,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useMessagesInfinite(conversationId);
 
-  // Scroll to bottom when new messages arrive
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLengthRef = useRef(0);
+  const isLoadingOlderRef = useRef(false);
+
+  // Flatten pages into single message array (chronological order)
+  const messages = data?.pages.flatMap((p) => p.messages) ?? [];
+
+  // Scroll to bottom on new messages (not when loading older)
   useEffect(() => {
-    if (messages && messages.length > prevMessagesLengthRef.current) {
+    if (messages.length > prevMessagesLengthRef.current && !isLoadingOlderRef.current) {
       scrollRef.current?.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: prevMessagesLengthRef.current === 0 ? 'auto' : 'smooth',
       });
     }
-    prevMessagesLengthRef.current = messages?.length || 0;
-  }, [messages]);
+    isLoadingOlderRef.current = false;
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages.length]);
+
+  // IntersectionObserver on sentinel to trigger loading older messages
+  const handleSentinel = useCallback(
+    (entries: IntersectionObserverEntry[]) => {
+      const [entry] = entries;
+      if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
+        const el = scrollRef.current;
+        const prevScrollHeight = el?.scrollHeight || 0;
+
+        isLoadingOlderRef.current = true;
+        fetchNextPage().then(() => {
+          // Preserve scroll position after loading older messages
+          requestAnimationFrame(() => {
+            if (el) {
+              const newScrollHeight = el.scrollHeight;
+              el.scrollTop += newScrollHeight - prevScrollHeight;
+            }
+          });
+        });
+      }
+    },
+    [hasNextPage, isFetchingNextPage, fetchNextPage]
+  );
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(handleSentinel, {
+      root: scrollRef.current,
+      threshold: 0.1,
+    });
+    observer.observe(sentinel);
+
+    return () => observer.disconnect();
+  }, [handleSentinel]);
 
   if (isLoading) {
     return (
@@ -67,7 +117,7 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
     );
   }
 
-  if (!messages || messages.length === 0) {
+  if (messages.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
         <MessageSquare className="w-12 h-12 mb-3 opacity-50" />
@@ -78,7 +128,9 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
   }
 
   // Group messages by date
-  const messagesWithDates: Array<{ type: 'date'; date: Date } | { type: 'message'; message: MessagingMessage }> = [];
+  const messagesWithDates: Array<
+    { type: 'date'; date: Date } | { type: 'message'; message: MessagingMessage }
+  > = [];
   let lastDate: string | null = null;
 
   messages.forEach((message) => {
@@ -97,9 +149,19 @@ export function MessageThread({ conversationId }: MessageThreadProps) {
       ref={scrollRef}
       className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50 dark:bg-slate-900/50"
     >
+      {/* Sentinel for loading older messages */}
+      <div ref={sentinelRef} className="h-1" />
+
+      {isFetchingNextPage && (
+        <div className="flex items-center justify-center py-3">
+          <Loader2 className="w-4 h-4 animate-spin text-slate-400 mr-2" />
+          <span className="text-xs text-slate-400">Carregando mensagens anteriores...</span>
+        </div>
+      )}
+
       {messagesWithDates.map((item, index) => {
         if (item.type === 'date') {
-          return <DateDivider key={`date-${index}`} date={item.date} />;
+          return <DateDivider key={`date-${format(item.date, 'yyyy-MM-dd')}`} date={item.date} />;
         }
         return <MessageBubble key={item.message.id} message={item.message} />;
       })}

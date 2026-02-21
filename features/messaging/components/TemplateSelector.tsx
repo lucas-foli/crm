@@ -210,7 +210,7 @@ function TemplatePreview({ template, variables }: TemplatePreviewProps) {
     if (!text) return '';
     let result = text;
     Object.entries(variables).forEach(([key, value]) => {
-      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value || `{{${key}}}`);
+      result = result.replaceAll(`{{${key}}}`, value || `{{${key}}}`);
     });
     return result;
   };

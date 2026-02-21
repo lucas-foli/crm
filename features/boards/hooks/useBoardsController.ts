@@ -256,8 +256,9 @@ export const useBoardsController = () => {
     });
     // Note: Removed setContext from dependencies - it has internal guards to prevent loops
     // Note: Removed clearContext cleanup to prevent infinite loop with AIContext default setter
-    // Dependencies usam primitivos para evitar re-execução quando objeto muda mas valores são iguais
-  }, [activeBoard, deals, statusFilter, ownerFilter, searchTerm, dateRange.start, dateRange.end]);
+    // Dependencies: only primitives to avoid re-execution when object reference changes but content is same
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBoard?.id, activeBoard?.name, activeBoard?.stages?.length, deals.length, statusFilter, ownerFilter, searchTerm, dateRange.start, dateRange.end]);
 
   // Get lifecycle stages from CRM context for automations
   const { lifecycleStages } = useCRM();

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw } from 'lucide-react';
+import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/utils/sanitize';
@@ -15,6 +15,8 @@ import { ContactPanel } from './components/ContactPanel';
 import { ContactLinkModal } from './components/Modals/ContactLinkModal';
 import { ChannelIndicator } from './components/ChannelIndicator';
 import { WindowExpiryBadge } from './components/WindowExpiryBadge';
+import { MessageSearchBar } from './components/MessageSearchBar';
+import { AssignmentDropdown } from './components/AssignmentDropdown';
 import {
   useConversation,
   useMarkConversationRead,
@@ -50,6 +52,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
   );
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   // Subscribe to realtime updates
   useRealtimeSyncMessaging();
@@ -86,6 +89,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
   // Update URL when conversation changes
   const handleSelectConversation = useCallback((id: string) => {
     setSelectedConversationId(id);
+    setShowSearch(false);
     router.push(`/messaging?id=${id}`, { scroll: false });
   }, [router]);
 
@@ -181,6 +185,23 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <AssignmentDropdown
+                  conversationId={selectedConversation.id}
+                  assignedUserId={selectedConversation.assignedUserId}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSearch((v) => !v)}
+                  className={cn(
+                    'p-2 rounded-lg transition-colors',
+                    showSearch
+                      ? 'text-primary-500 bg-primary-50 dark:bg-primary-500/10'
+                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+                  )}
+                  title="Buscar mensagens"
+                >
+                  <Search className="w-5 h-5" />
+                </button>
                 {selectedConversation.status === 'open' && (
                   <button
                     type="button"
@@ -232,6 +253,14 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                 </DropdownMenu>
               </div>
             </div>
+
+            {/* Search Bar */}
+            {showSearch && (
+              <MessageSearchBar
+                conversationId={selectedConversation.id}
+                onClose={() => setShowSearch(false)}
+              />
+            )}
 
             {/* Messages */}
             <MessageThread conversationId={selectedConversation.id} />

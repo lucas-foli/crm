@@ -17,9 +17,10 @@ export async function GET(
 ) {
   const { dealId } = await params;
 
-  if (!dealId) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!dealId || !uuidRegex.test(dealId)) {
     return NextResponse.json(
-      { error: 'dealId is required' },
+      { error: 'Invalid or missing dealId' },
       { status: 400 }
     );
   }
@@ -37,11 +38,23 @@ export async function GET(
       );
     }
 
-    // Verify user has access to this deal (RLS will handle this, but let's be explicit)
+    // Get user profile for org check (defense-in-depth)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+    }
+
+    // Verify deal belongs to user's organization
     const { data: deal, error: dealError } = await supabase
       .from('deals')
       .select('id, organization_id')
       .eq('id', dealId)
+      .eq('organization_id', profile.organization_id)
       .single();
 
     if (dealError || !deal) {

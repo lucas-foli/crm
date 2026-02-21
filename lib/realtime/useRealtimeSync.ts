@@ -8,7 +8,7 @@
  *   useRealtimeSync('deals');  // Subscribe to deals table changes
  *   useRealtimeSync(['deals', 'activities']);  // Multiple tables
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
@@ -100,7 +100,8 @@ export function useRealtimeSync(
   const { enabled = true, debounceMs = 100, onchange } = options;
   const queryClient = useQueryClient();
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const isConnectedRef = useRef(false);
+  const instanceIdRef = useRef(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingInvalidationsRef = useRef<Set<readonly unknown[]>>(new Set());
   const pendingInvalidateOnlyRef = useRef<Set<readonly unknown[]>>(new Set());
@@ -126,19 +127,21 @@ export function useRealtimeSync(
     }
 
     const tableList = Array.isArray(tables) ? tables : [tables];
-    const channelName = `realtime-sync-${tableList.join('-')}`;
+    // Use unique instance ID to avoid conflict with channel being disconnected
+    instanceIdRef.current += 1;
+    const channelName = `realtime-sync-${tableList.join('-')}-${instanceIdRef.current}`;
 
-    // Cleanup existing channel if any
+    // Cleanup existing channel if any (detach-and-forget pattern)
     if (channelRef.current) {
       if (DEBUG_REALTIME) {
-        console.log(`[Realtime] Cleaning up existing channel: ${channelName}`);
+        console.log(`[Realtime] Cleaning up existing channel`);
       }
-      sb.removeChannel(channelRef.current);
+      const oldChannel = channelRef.current;
       channelRef.current = null;
+      sb.removeChannel(oldChannel);
     }
 
-    // Create channel
-    // Note: Supabase Realtime handles reconnection automatically
+    // Create channel with unique name to avoid race condition with previous removal
     const channel = sb.channel(channelName);
 
     // Subscribe to each table
@@ -697,72 +700,45 @@ export function useRealtimeSync(
       );
     });
 
-    // Subscribe to channel
-    channel.subscribe((status) => {
-      if (DEBUG_REALTIME) {
-        console.log(`[Realtime] Channel ${channelName} status:`, status);
-      }
-      
-      // #region agent log
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`[Realtime] Channel ${channelName} status changed:`, status, { tables: tableList.join(',') });
-      }
-      // #endregion
-      
-      setIsConnected(status === 'SUBSCRIBED');
-      
-      if (status === 'SUBSCRIBED') {
+    // Delay subscription slightly to avoid race condition with previous channel
+    // removal in React StrictMode (unmount → remount happens synchronously, but
+    // Supabase removeChannel is async on the server side).
+    const subscribeTimer = setTimeout(() => {
+      channel.subscribe((status) => {
         if (DEBUG_REALTIME) {
-          console.log(`[Realtime] Successfully subscribed to ${tableList.join(', ')}`);
+          console.log(`[Realtime] Channel ${channelName} status:`, status);
         }
-        // #region agent log
-        if (process.env.NODE_ENV !== 'production') {
-          const logData = {
-            channelName,
-            tables: tableList.join(','),
-            status: 'SUBSCRIBED',
-          };
+
+        isConnectedRef.current = status === 'SUBSCRIBED';
+
+        if (status === 'SUBSCRIBED') {
           console.log(`[Realtime] ✅ Connected to ${tableList.join(', ')}`);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.warn(`[Realtime] Channel error for ${channelName} (will auto-retry)`);
+        } else if (status === 'TIMED_OUT') {
+          console.warn(`[Realtime] Channel timeout for ${channelName}`);
+        } else if (status === 'CLOSED') {
+          if (DEBUG_REALTIME) {
+            console.warn(`[Realtime] Channel closed for ${channelName}`);
+          }
         }
-        // #endregion
-      } else if (status === 'CHANNEL_ERROR') {
-        console.error(`[Realtime] Channel error for ${channelName}`);
-        // #region agent log
-        if (process.env.NODE_ENV !== 'production') {
-          const logData = { channelName, tables: tableList.join(','), status: 'CHANNEL_ERROR' };
-        }
-        // #endregion
-      } else if (status === 'TIMED_OUT') {
-        console.warn(`[Realtime] Channel timeout for ${channelName}`);
-        // #region agent log
-        if (process.env.NODE_ENV !== 'production') {
-          const logData = { channelName, tables: tableList.join(','), status: 'TIMED_OUT' };
-        }
-        // #endregion
-      } else if (status === 'CLOSED') {
-        if (DEBUG_REALTIME) {
-          console.warn(`[Realtime] Channel closed for ${channelName}`);
-        }
-        // #region agent log
-        if (process.env.NODE_ENV !== 'production') {
-          const logData = { channelName, tables: tableList.join(','), status: 'CLOSED' };
-        }
-        // #endregion
-      }
-    });
+      });
+    }, 100);
 
     channelRef.current = channel;
 
-    // Cleanup
+    // Cleanup (detach-and-forget: null ref immediately, remove async)
     return () => {
+      clearTimeout(subscribeTimer);
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
-      if (channelRef.current) {
-        sb.removeChannel(channelRef.current);
-        channelRef.current = null;
+      const channelToRemove = channelRef.current;
+      channelRef.current = null;
+      isConnectedRef.current = false;
+      if (channelToRemove) {
+        sb.removeChannel(channelToRemove);
       }
-      setIsConnected(false);
     };
     // Only re-run if enabled, tables, or debounceMs change
     // queryClient is stable, onchange is handled via ref
@@ -780,7 +756,7 @@ export function useRealtimeSync(
       });
     },
     /** Check if channel is connected */
-    isConnected,
+    isConnected: isConnectedRef.current,
   };
 }
 

@@ -25,8 +25,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const { id: pendingAdvanceId } = await context.params;
 
-    if (!pendingAdvanceId) {
-      return NextResponse.json({ error: 'Missing pending advance ID' }, { status: 400 });
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!pendingAdvanceId || !uuidRegex.test(pendingAdvanceId)) {
+      return NextResponse.json({ error: 'Invalid or missing pending advance ID' }, { status: 400 });
     }
 
     const supabase = await createClient();

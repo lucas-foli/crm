@@ -36,13 +36,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Parse request body
-    const body = await request.json();
+    // Parse and validate request body
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
     const { conversationId, organizationId, messageId, messageText } = body;
 
+    // Validate required fields and UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!conversationId || !organizationId || !messageText) {
       return NextResponse.json(
         { error: 'Missing required fields: conversationId, organizationId, messageText' },
+        { status: 400 }
+      );
+    }
+
+    if (!uuidRegex.test(conversationId) || !uuidRegex.test(organizationId)) {
+      return NextResponse.json(
+        { error: 'Invalid UUID format for conversationId or organizationId' },
+        { status: 400 }
+      );
+    }
+
+    if (messageId && !uuidRegex.test(messageId)) {
+      return NextResponse.json(
+        { error: 'Invalid UUID format for messageId' },
         { status: 400 }
       );
     }
