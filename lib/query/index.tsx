@@ -111,6 +111,22 @@ const handleMutationError = (error: unknown, _variables: unknown, _context: unkn
 // ============ QUERY CLIENT ============
 
 /**
+ * Política de staleTime por tipo de dado:
+ *
+ * | Tipo                       | staleTime | Justificativa                                     |
+ * |----------------------------|-----------|---------------------------------------------------|
+ * | Referência (boards, stages)| 5min      | Raramente muda, default global                    |
+ * | Deals                      | 2min      | Kanban precisa de dados relativamente frescos     |
+ * | Conversations (inbox)      | 30s       | Alta frequência de updates, near-realtime         |
+ * | AI metrics                 | 5min      | Dashboard, não requer refresh frequente           |
+ * | User profile               | 5min      | Default global                                    |
+ *
+ * Realtime (Supabase) invalida o cache automaticamente via queryClient.invalidateQueries
+ * quando eventos INSERT/UPDATE chegam — portanto staleTime alto é seguro para entidades
+ * cobertas pelo Realtime.
+ */
+
+/**
  * Cliente TanStack Query configurado para o NossoCRM.
  * 
  * Configurações:
