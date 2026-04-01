@@ -12,7 +12,7 @@
 // POST { action: string, data: object }
 // -> 200 { result?: any, error?: string, consentType?: string, retryAfter?: number }
 
-import { generateObject, generateText } from 'ai';
+import { generateText, Output } from 'ai';
 import { getModel, type AIProvider } from '@/lib/ai/config';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
@@ -238,13 +238,13 @@ export async function POST(req: Request) {
           stageLabel: stageLabel || deal?.status || '',
           probability: deal?.probability || 50,
         });
-        const result = await generateObject({
+        const result = await generateText({
           model,
           maxRetries: 3,
-          schema: AnalyzeLeadSchema,
+          output: Output.object({ schema: AnalyzeLeadSchema }),
           prompt,
         });
-        return json<AIActionResponse>({ result: result.object });
+        return json<AIActionResponse>({ result: result.output });
       }
 
       case 'generateEmailDraft': {
@@ -277,10 +277,10 @@ export async function POST(req: Request) {
         const snapshotText = safeContextText(cockpitSnapshot);
         const nbaText = safeContextText(nextBestAction);
 
-        const result = await generateObject({
+        const result = await generateText({
           model,
           maxRetries: 3,
-          schema: RewriteMessageDraftSchema,
+          output: Output.object({ schema: RewriteMessageDraftSchema }),
           prompt: `Você é um vendedor sênior e copywriter.
 Sua tarefa é REESCREVER (melhorar) uma mensagem para enviar ao cliente.
 
@@ -316,7 +316,7 @@ REGRAS:
 Retorne APENAS no formato do schema (subject opcional, message obrigatório).`,
         });
 
-        return json<AIActionResponse>({ result: result.object });
+        return json<AIActionResponse>({ result: result.output });
       }
 
       case 'generateRescueMessage': {
@@ -350,14 +350,14 @@ Responda em português do Brasil.`,
           description,
           lifecycleJson: JSON.stringify(lifecycleList),
         });
-        const result = await generateObject({
+        const result = await generateText({
           model,
           maxRetries: 3,
-          schema: BoardStructureSchema,
+          output: Output.object({ schema: BoardStructureSchema }),
           prompt,
         });
 
-        return json<AIActionResponse>({ result: result.object });
+        return json<AIActionResponse>({ result: result.output });
       }
 
       case 'generateBoardStrategy': {
@@ -366,13 +366,13 @@ Responda em português do Brasil.`,
         const prompt = renderPromptTemplate(resolved?.content || '', {
           boardName: boardData?.boardName || '',
         });
-        const result = await generateObject({
+        const result = await generateText({
           model,
           maxRetries: 3,
-          schema: BoardStrategySchema,
+          output: Output.object({ schema: BoardStrategySchema }),
           prompt,
         });
-        return json<AIActionResponse>({ result: result.object });
+        return json<AIActionResponse>({ result: result.output });
       }
 
       case 'refineBoardWithAI': {
@@ -387,13 +387,13 @@ Responda em português do Brasil.`,
           boardContext,
           historyContext,
         });
-        const result = await generateObject({
+        const result = await generateText({
           model,
           maxRetries: 3,
-          schema: RefineBoardSchema,
+          output: Output.object({ schema: RefineBoardSchema }),
           prompt,
         });
-        return json<AIActionResponse>({ result: result.object });
+        return json<AIActionResponse>({ result: result.output });
       }
 
       case 'generateObjectionResponse': {
@@ -403,25 +403,25 @@ Responda em português do Brasil.`,
           objection,
           dealTitle: deal?.title || '',
         });
-        const result = await generateObject({
+        const result = await generateText({
           model,
           maxRetries: 3,
-          schema: ObjectionResponseSchema,
+          output: Output.object({ schema: ObjectionResponseSchema }),
           prompt,
         });
-        return json<AIActionResponse>({ result: result.object });
+        return json<AIActionResponse>({ result: result.output });
       }
 
       case 'parseNaturalLanguageAction': {
         const { text } = data as any;
-        const result = await generateObject({
+        const result = await generateText({
           model,
           maxRetries: 3,
-          schema: ParsedActionSchema,
+          output: Output.object({ schema: ParsedActionSchema }),
           prompt: `Parse para CRM Action: "${text}".
 Campos: title, type (CALL/MEETING/EMAIL/TASK), date, contactName, companyName, confidence.`,
         });
-        return json<AIActionResponse>({ result: result.object });
+        return json<AIActionResponse>({ result: result.output });
       }
 
       case 'chatWithCRM': {
