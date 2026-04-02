@@ -132,13 +132,17 @@ const WEBHOOK_CONFIGS: Record<string, {
     where: 'Acesse developer.z-api.io → Sua instância → aba "Webhooks e configurações gerais"',
     docsUrl: 'https://developer.z-api.io/webhooks/introduction',
     fields: [
-      { label: 'Ao receber', description: 'Mensagens que o lead manda chegam no CRM', required: true },
-      { label: 'Receber status da mensagem', description: 'Saber se foi entregue e lida (✓✓ azul)' },
-      { label: 'Ao enviar', description: 'Confirma que a mensagem enviada pelo CRM saiu' },
-      { label: 'Ao conectar', description: 'Atualiza status do canal pra "Conectado"' },
-      { label: 'Ao desconectar', description: 'Marca canal como "Desconectado" se o WhatsApp cair' },
+      { label: 'Ao receber (Receive)', description: 'Recebe mensagens dos leads no CRM — obrigatório pra funcionar', required: true },
+      { label: 'Receber status da mensagem (Status)', description: 'Rastreia entregue (✓✓), lido (✓✓ azul), respondido', required: true },
+      { label: 'Ao enviar (Delivery)', description: 'Confirma que a mensagem enviada pelo CRM foi entregue ao WhatsApp' },
+      { label: 'Ao conectar', description: 'Avisa quando o WhatsApp reconecta' },
+      { label: 'Ao desconectar (Disconnected)', description: 'Avisa se o WhatsApp cair ou perder conexão' },
+      { label: 'Presença do chat', description: 'Não utilizado — pode deixar vazio' },
     ],
-    toggles: ['Ative "Notificar as enviadas por mim também" — senão mensagens pelo celular não aparecem no CRM'],
+    toggles: [
+      'Ative "Notificar as enviadas por mim também" — senão mensagens enviadas pelo celular não aparecem no CRM',
+      'Cole a mesma URL em todos os campos (exceto Presença do chat). O sistema identifica o tipo de evento automaticamente.',
+    ],
   },
   'meta-cloud': {
     title: 'Configurar Webhook no Meta for Developers',
@@ -269,7 +273,7 @@ function WebhookInfo({ channelId, provider, verifyToken }: { channelId: string; 
                 ))}
               </div>
               <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-1 italic">
-                * Cole a mesma URL em todos os campos. O sistema identifica o tipo de evento automaticamente.
+                * Obrigatório para o canal funcionar.
               </p>
             </div>
           )}
