@@ -46,7 +46,7 @@ export async function detectRecentTelegramMessage(
 
   const cutoff = Math.floor(Date.now() / 1000) - sinceSeconds;
   const recent = body.result
-    .filter(u => u.message && u.message.date >= cutoff && u.message.chat.type === 'private')
+    .filter(u => u.message && u.message.date >= cutoff && ['private', 'group', 'supergroup'].includes(u.message.chat.type))
     .at(-1);
 
   if (!recent?.message) return null;

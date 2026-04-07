@@ -23,7 +23,7 @@ const UpdateOrgAISettingsSchema = z
     aiOpenaiKey: z.string().optional(),
     aiAnthropicKey: z.string().optional(),
     telegramBotToken: z.string().optional(),
-    telegramChatId: z.string().optional(),
+    telegramChatId: z.string().nullable().optional(),
   })
   .strict();
 
@@ -176,7 +176,7 @@ export async function POST(req: Request) {
     dbUpdates.telegram_bot_token = updates.telegramBotToken.trim() || null;
   }
   if (updates.telegramChatId !== undefined) {
-    dbUpdates.telegram_chat_id = updates.telegramChatId.trim() || null;
+    dbUpdates.telegram_chat_id = updates.telegramChatId ? updates.telegramChatId.trim() || null : null;
   }
 
   const { error: upsertError } = await supabase

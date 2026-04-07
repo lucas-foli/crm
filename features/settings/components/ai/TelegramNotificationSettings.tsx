@@ -180,7 +180,7 @@ export function TelegramNotificationSettings() {
   const handleDisconnect = () => {
     stopPolling();
     setConnectedName(null);
-    mutation.mutate({ telegramChatId: null });
+    mutation.mutate({ telegramChatId: '' });
   };
 
   const handleTest = async () => {
@@ -226,18 +226,29 @@ export function TelegramNotificationSettings() {
         ) : isConnected ? (
           // ─── Estado: conectado ────────────────────────────────────────────
           <div className="space-y-4">
-            <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30 px-4 py-3">
-              <span className="text-xl">✓</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-green-800 dark:text-green-300">
-                  {connectedName
-                    ? `Conectado como ${connectedName}`
-                    : 'Bot conectado e pronto para notificações'}
-                </p>
-                <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
-                  Você receberá alertas de handoff neste chat.
-                </p>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30 px-4 py-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-lg shrink-0">✓</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-green-800 dark:text-green-300">
+                    {connectedName
+                      ? `Conectado como ${connectedName}`
+                      : 'Bot conectado e pronto para notificações'}
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
+                    Alertas de handoff serão enviados para este chat.
+                  </p>
+                </div>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDisconnect}
+                disabled={mutation.isPending}
+                className="shrink-0 text-xs"
+              >
+                Trocar
+              </Button>
             </div>
 
             <div className="flex items-center gap-3">
@@ -251,12 +262,6 @@ export function TelegramNotificationSettings() {
                     ? 'Mensagem enviada ✓'
                     : 'Enviar mensagem de teste'}
               </Button>
-              <button
-                onClick={handleDisconnect}
-                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-              >
-                Trocar destinatário
-              </button>
             </div>
 
             {testStatus === 'error' && (
