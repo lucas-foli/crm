@@ -5,10 +5,12 @@
 -- not exist. The correct column name is m.external_id.
 -- Also adds REVOKE FROM PUBLIC as defense-in-depth (SECURITY INVOKER means
 -- RLS applies, but explicit revoke prevents anon access attempts).
+--
+-- Note: DROP FUNCTION is required because CREATE OR REPLACE cannot change a
+-- function's return type (external_message_id -> external_id in RETURNS TABLE).
 -- =============================================================================
 
-REVOKE ALL ON FUNCTION public.search_messages(UUID, TEXT, INT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.search_messages(UUID, TEXT, INT) TO authenticated;
+DROP FUNCTION IF EXISTS public.search_messages(UUID, TEXT, INT);
 
 CREATE OR REPLACE FUNCTION public.search_messages(
   p_conversation_id UUID,
@@ -55,3 +57,6 @@ BEGIN
   LIMIT LEAST(p_limit, 100);
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.search_messages(UUID, TEXT, INT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.search_messages(UUID, TEXT, INT) TO authenticated;
