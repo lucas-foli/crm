@@ -270,3 +270,95 @@ limit 50;
   - inbound: recrie a configuração (gera novo `source_id` e secret)
   - outbound: use **Regenerar secret** e atualize o destino
 
+---
+
+## 5) Receita: Evolution API (WhatsApp) → NossoCRM
+
+Para clínicas de estética que recebem novos leads por WhatsApp, a recomendação é:
+**Evolution API** (hospedada pelo cliente, sem dependência de Meta Cloud).
+
+### Passo a passo
+
+1. O cliente sobe/contrata uma instância da Evolution API. Cada instância tem:
+   - `EVOLUTION_SERVER_URL` (ex.: `https://evo.seudominio.com`)
+   - `EVOLUTION_API_KEY` (token master)
+   - `EVOLUTION_INSTANCE` (nome da instância, ex.: `clinica-lume`)
+
+2. No NossoCRM, em `Configurações → Integrações → Webhooks`, crie **Entrada de Leads**:
+   - Board: o funil da clínica
+   - Estágio: **Novo interesse** (quando `VERTICAL_PRESET=aesthetic_clinic`, já vem como
+     `is_default=true`; o preset seed garante que ele exista).
+   - Copie a **URL** e o **Secret** gerados.
+
+3. Na Evolution API (painel ou `POST /webhook/set/<instance>`), configure:
+
+   ```json
+   {
+     "enabled": true,
+     "url": "https://<SEU-PROJETO>.supabase.co/functions/v1/webhook-in/<source_id>",
+     "webhook_by_events": false,
+     "events": ["MESSAGES_UPSERT"],
+     "headers": {
+       "X-Webhook-Secret": "<secret>",
+       "Content-Type": "application/json"
+     }
+   }
+   ```
+
+### Payload esperado (resumido)
+
+O NossoCRM aceita o payload padrão `MESSAGES_UPSERT` da Evolution:
+
+```json
+{
+  "event": "messages.upsert",
+  "instance": "clinica-lume",
+  "data": {
+    "key": {
+      "remoteJid": "5511999999999@s.whatsapp.net",
+      "fromMe": false,
+      "id": "ABC123"
+    },
+    "pushName": "Maria Silva",
+    "message": { "conversation": "Oi, queria saber sobre harmonização facial" },
+    "messageTimestamp": 1734567890
+  }
+}
+```
+
+Como o webhook-in atual espera os campos `contact_name`, `phone`, `notes` em nível
+raiz, **use um intermediário (n8n)** para mapear o payload da Evolution para o formato
+esperado pelo NossoCRM:
+
+```js
+// Nó "Code" no n8n após receber o webhook da Evolution
+return [{
+  json: {
+    contact_name: $json.data.pushName,
+    phone: "+" + $json.data.key.remoteJid.replace("@s.whatsapp.net", ""),
+    notes: $json.data.message?.conversation ?? "[mensagem não textual]",
+    source: "evolution_wa",
+    external_event_id: $json.data.key.id
+  }
+}];
+```
+
+Em seguida, faça o `HTTP Request` para a URL do webhook-in com header `X-Webhook-Secret`.
+
+### Comportamento quando `VERTICAL_PRESET=aesthetic_clinic`
+
+- O installer (`/api/setup-instance`) semeia automaticamente um board **Funil de Leads**
+  com 7 estágios (`Novo interesse` → `Retorno`) e marca `Novo interesse` como
+  `is_default=true`.
+- Qualquer fonte de inbound criada SEM `default_stage_id` explícito cai em
+  `Novo interesse`.
+- A fonte recomendada para clínicas é `source: "evolution_wa"` — isso é apenas um
+  rótulo usado em filtros/auditoria.
+
+### Rotação de credenciais da Evolution API
+
+Credenciais da Evolution (`serverUrl`, `apiKey`, `instance`) **ainda são configuradas
+por canal** no código hoje. Para rotacionar: atualize o canal em `Configurações →
+Canais → WhatsApp` e redeploy. **Follow-up (Fix #5 do backlog GTM)**: mover para uma
+vault `organization_secrets` com AES-GCM — rastreado em `repo_fixes_plan.md`.
+
