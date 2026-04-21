@@ -109,6 +109,40 @@ function getApiKeyFromRequest(req: Request): string {
 }
 
 /**
+ * Timing-safe string comparison to prevent timing oracle attacks on API key checks.
+ * Falls back to constant-time XOR if subtle crypto is unavailable.
+ */
+async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const aBytes = enc.encode(a);
+  const bBytes = enc.encode(b);
+  // Length must match; pad shorter to length of longer with fixed byte
+  const len = Math.max(aBytes.length, bBytes.length);
+  const aPadded = new Uint8Array(len);
+  const bPadded = new Uint8Array(len);
+  aPadded.set(aBytes);
+  bPadded.set(bBytes);
+  try {
+    // Import both as HMAC keys and compare — subtleCrypto provides constant-time
+    const key = await crypto.subtle.importKey(
+      "raw", aPadded, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, bPadded);
+    const sigBytes = new Uint8Array(sig);
+    // Verify: sign bPadded with key derived from aPadded, then check it's consistent
+    // Simpler: XOR fallback is acceptable when lengths differ (already detected above)
+    let result = aBytes.length === bBytes.length ? 0 : 1;
+    for (let i = 0; i < len; i++) result |= (aPadded[i] ^ bPadded[i]);
+    return result === 0 && sigBytes.length > 0;
+  } catch {
+    // Constant-time XOR fallback
+    let result = aBytes.length === bBytes.length ? 0 : 1;
+    for (let i = 0; i < len; i++) result |= (aPadded[i] ^ bPadded[i]);
+    return result === 0;
+  }
+}
+
+/**
  * Normalize remoteJid to a clean phone number.
  * Handles @s.whatsapp.net and @lid suffixes.
  * Falls back to senderPn when @lid is detected (Evolution bug).
@@ -212,6 +246,50 @@ function mapNumericStatus(status: number): string | null {
     5: "read",
   };
   return map[status] ?? null;
+}
+
+/**
+ * Generate stable event ID for audit logging and deduplication.
+ * Produces unique, deterministic IDs per event type:
+ * - messages.upsert: evo_msg_{messageId}
+ * - messages.update: evo_status_{messageId}_{numericStatus}
+ * - connection.update: evo_conn_{channelId}_{state}
+ * - other: evo_{event}_{timestamp}
+ */
+function generateStableEventId(
+  payload: EvolutionPayload,
+  channelId: string,
+  eventNorm: string
+): string {
+  if (eventNorm === "messages.upsert") {
+    const data = (payload as EvolutionUpsertPayload).data;
+    return `evo_msg_${data.key.id}`;
+  }
+
+  if (eventNorm === "messages.update") {
+    const updates = (payload as EvolutionUpdatePayload).data;
+    if (Array.isArray(updates) && updates.length > 0) {
+      const first = updates[0];
+      const status = first.update?.status ?? "unknown";
+      return `evo_status_${first.key.id}_${status}`;
+    }
+    return `evo_status_unknown_${Date.now()}`;
+  }
+
+  if (eventNorm === "connection.update") {
+    const state = (payload as EvolutionConnectionUpdatePayload).data?.state ?? "unknown";
+    return `evo_conn_${channelId}_${state}`;
+  }
+
+  // Fallback for unhandled events
+  return `evo_${eventNorm.replace(/\./g, "_")}_${Date.now()}`;
+}
+
+/**
+ * Determine event type string for audit logging.
+ */
+function determineEventType(eventNorm: string): string {
+  return eventNorm || "unknown";
 }
 
 /**
@@ -332,7 +410,7 @@ Deno.serve(async (req) => {
     (channel.credentials as Record<string, string>)?.apiKey;
   const providedKey = getApiKeyFromRequest(req);
 
-  if (!webhookSecret || !providedKey || providedKey !== webhookSecret) {
+  if (!webhookSecret || !providedKey || !(await timingSafeEqual(providedKey, webhookSecret))) {
     return json(401, { error: "API key inválida" });
   }
 
@@ -341,6 +419,32 @@ Deno.serve(async (req) => {
 
   // Normalize event name: Evolution v2 sends UPPERCASE, some versions use lowercase
   const eventNorm = payload.event?.toLowerCase().replace(/_/g, ".");
+
+  // =========================================================================
+  // AUDIT LOGGING & DEDUPLICATION
+  // =========================================================================
+  const externalEventId = generateStableEventId(payload, channelId, eventNorm);
+
+  const { error: eventInsertErr } = await supabase
+    .from("messaging_webhook_events")
+    .insert({
+      channel_id: channelId,
+      event_type: determineEventType(eventNorm),
+      external_event_id: externalEventId,
+      payload: payload as unknown as Record<string, unknown>,
+      processed: false,
+    });
+
+  // If duplicate (already processed), return early with success
+  if (eventInsertErr?.message?.toLowerCase().includes("duplicate")) {
+    console.log(`[Evolution] Duplicate event ignored: ${externalEventId}`);
+    return json(200, { ok: true, duplicate: true, event_id: externalEventId });
+  }
+
+  if (eventInsertErr) {
+    // Log but don't fail — audit logging is best-effort
+    console.error("[Evolution] Error logging webhook event:", eventInsertErr);
+  }
 
   try {
     if (eventNorm === "messages.upsert") {
@@ -353,9 +457,28 @@ Deno.serve(async (req) => {
       console.log(`[Evolution] Unhandled event: ${payload.event} instance: ${instanceName.slice(0, 64)}`);
     }
 
+    // Mark event as processed
+    await supabase
+      .from("messaging_webhook_events")
+      .update({ processed: true, processed_at: new Date().toISOString() })
+      .eq("channel_id", channelId)
+      .eq("external_event_id", externalEventId);
+
     return json(200, { ok: true, event: payload.event });
   } catch (error) {
     console.error("[Evolution] Webhook processing error:", error);
+
+    // Log error in webhook event
+    await supabase
+      .from("messaging_webhook_events")
+      .update({
+        processed: true,
+        processed_at: new Date().toISOString(),
+        error: error instanceof Error ? error.message : "Unknown error",
+      })
+      .eq("channel_id", channelId)
+      .eq("external_event_id", externalEventId);
+
     // Always return 200 to avoid retry storms
     return json(200, {
       ok: false,

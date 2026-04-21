@@ -4,14 +4,19 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 // lamejs is loaded as a global script (/lame.min.js) to avoid Turbopack CJS interop issues.
 // See: app/(protected)/layout.tsx — <Script src="/lame.min.js" />
 declare global {
-  // eslint-disable-next-line no-var
   var lamejs: { Mp3Encoder: new (channels: number, sampleRate: number, bitRate: number) => {
     encodeBuffer(left: Int16Array, right?: Int16Array): Int8Array;
     flush(): Int8Array;
   }};
 }
 import { Send, Paperclip, Smile, Clock, FileText, X, Loader2, Image, File as FileIcon, Mic, Square, Reply } from 'lucide-react';
-import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react';
+import dynamic from 'next/dynamic';
+import { type EmojiClickData, Theme } from 'emoji-picker-react';
+
+const EmojiPicker = dynamic(() => import('emoji-picker-react'), {
+  ssr: false,
+  loading: () => <div className="w-[320px] h-[400px] animate-pulse bg-slate-800 rounded-xl" />,
+});
 import { cn } from '@/lib/utils';
 import { useSendTextMessage, useSendMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
 import { useAssignConversation } from '@/lib/query/hooks/useConversationsQuery';
@@ -650,14 +655,19 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
             )}
           </button>
 
+          <label htmlFor="message-input" className="sr-only">
+            {pendingMedia ? 'Adicionar legenda (opcional)' : 'Digite uma mensagem'}
+          </label>
           <textarea
             ref={textareaRef}
+            id="message-input"
             value={text}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             placeholder={pendingMedia ? 'Adicionar legenda (opcional)...' : 'Digite uma mensagem...'}
             disabled={isDisabled}
             rows={1}
+            aria-label={pendingMedia ? 'Adicionar legenda (opcional)' : 'Digite uma mensagem'}
             className={cn(
               'flex-1 py-2.5 text-sm resize-none bg-transparent',
               'focus:outline-none',
@@ -722,6 +732,7 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
           <button
             type="submit"
             disabled={(!text.trim() && !pendingMedia) || isDisabled}
+            aria-label="Enviar mensagem"
             className={cn(
               'flex-shrink-0 p-2.5 rounded-full transition-colors',
               (text.trim() || pendingMedia) && !isDisabled
@@ -729,7 +740,7 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
                 : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
             )}
           >
-            <Send className="w-5 h-5" />
+            <Send className="w-5 h-5" aria-hidden="true" />
           </button>
         )}
       </div>

@@ -13,12 +13,16 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "smoke:integrations": "node scripts/smoke-integrations.mjs"
+    "smoke:integrations": "node scripts/smoke-integrations.mjs",
+    "release:prepare": "node scripts/release.mjs prepare",
+    "release:draft": "node scripts/release.mjs draft",
+    "release:tag": "node scripts/release.mjs tag"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.55",
     "@ai-sdk/react": "^3.0.144",
     "@faker-js/faker": "^10.4.0",
+    "@google/genai": "^1.49.0",
     "@hookform/resolvers": "^5.2.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-accordion": "^1.2.12",
