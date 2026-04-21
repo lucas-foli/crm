@@ -149,6 +149,13 @@ COMMENT ON FUNCTION public.trigger_hitl_alerts() IS
 -- 4. Function: expire_old_pending_advances()
 -- ============================================================================
 -- Marca como 'expired' as pending_advances além de 24h
+--
+-- Note: DROP is required because the previous definition (20260207100000,
+-- re-qualified in 20260221200002) returned `void`, and Postgres rejects
+-- CREATE OR REPLACE when the return type changes. DROP also clears the
+-- REVOKE/GRANT from 20260223000001, which we re-apply below.
+
+DROP FUNCTION IF EXISTS public.expire_old_pending_advances();
 
 CREATE OR REPLACE FUNCTION public.expire_old_pending_advances()
   RETURNS TABLE(expired_count BIGINT) AS $$
@@ -171,6 +178,10 @@ COMMENT ON FUNCTION public.expire_old_pending_advances() IS
   'Expira ai_pending_stage_advances que ultrapassaram o tempo limite.
    Retorna contagem de registros expirados.';
 
+-- Re-apply hardening from 20260223000001 (lost by DROP above).
+REVOKE ALL ON FUNCTION public.expire_old_pending_advances() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.expire_old_pending_advances() TO service_role;
+
 -- ============================================================================
 -- 5. pg_cron Jobs (se extensão disponível)
 -- ============================================================================
@@ -178,27 +189,24 @@ COMMENT ON FUNCTION public.expire_old_pending_advances() IS
 -- - Trigger alerts a cada 6 horas
 -- - Expire old records a cada 12 horas
 
--- Verificar se pg_cron está disponível
+-- Verificar se pg_cron está disponível.
+-- Guard via pg_extension check + dynamic EXECUTE: the original EXCEPTION WHEN
+-- undefined_object did not catch undefined_schema (3F000), which is what
+-- PostgreSQL raises when the `cron` schema itself is missing (e.g. shadow DB).
 DO $$
 BEGIN
-  -- Job 1: trigger_hitl_alerts a cada 6 horas (00:00, 06:00, 12:00, 18:00 UTC)
-  PERFORM cron.schedule(
-    'hitl-pending-alerts',
-    '0 */6 * * *',
-    'SELECT public.trigger_hitl_alerts();'
-  );
-  RAISE NOTICE 'Created cron job: hitl-pending-alerts (every 6 hours)';
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    -- Job 1: trigger_hitl_alerts a cada 6 horas (00:00, 06:00, 12:00, 18:00 UTC)
+    EXECUTE $cmd$SELECT cron.schedule('hitl-pending-alerts', '0 */6 * * *', 'SELECT public.trigger_hitl_alerts();')$cmd$;
+    RAISE NOTICE 'Created cron job: hitl-pending-alerts (every 6 hours)';
 
-  -- Job 2: expire_old_pending_advances a cada 12 horas
-  PERFORM cron.schedule(
-    'expire-hitl-pending',
-    '0 */12 * * *',
-    'SELECT public.expire_old_pending_advances();'
-  );
-  RAISE NOTICE 'Created cron job: expire-hitl-pending (every 12 hours)';
-EXCEPTION WHEN undefined_object THEN
-  RAISE NOTICE 'pg_cron extension not available. Jobs must be triggered manually.
-    Call trigger_hitl_alerts() and expire_old_pending_advances() from application code.';
+    -- Job 2: expire_old_pending_advances a cada 12 horas
+    EXECUTE $cmd$SELECT cron.schedule('expire-hitl-pending', '0 */12 * * *', 'SELECT public.expire_old_pending_advances();')$cmd$;
+    RAISE NOTICE 'Created cron job: expire-hitl-pending (every 12 hours)';
+  ELSE
+    RAISE NOTICE 'pg_cron extension not available. Jobs must be triggered manually.
+      Call trigger_hitl_alerts() and expire_old_pending_advances() from application code.';
+  END IF;
 END $$;
 
 -- ============================================================================
