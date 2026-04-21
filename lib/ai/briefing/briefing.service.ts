@@ -11,6 +11,7 @@ import { generateText, Output } from 'ai';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getModel } from '../config';
 import { getOrgAIConfig } from '../agent/agent.service';
+import { getActivePreset } from '@/lib/presets';
 import { MeetingBriefingSchema, type BriefingResponse, type MeetingBriefing } from './schemas';
 
 // =============================================================================
@@ -23,7 +24,26 @@ const MAX_MESSAGES_FOR_BRIEFING = 50;
 // System Prompt
 // =============================================================================
 
-const BRIEFING_SYSTEM_PROMPT = `Você é um assistente de vendas brasileiro especializado em preparar briefings pré-conversa.
+/**
+ * Resolve which system prompt to use for briefings.
+ *
+ * Priority:
+ *  1. If a vertical preset is active (`VERTICAL_PRESET`) AND exposes an
+ *     `aiBriefingPrompt` AND its locale is pt-BR → use the preset prompt.
+ *  2. Otherwise → fall back to the generic pt-BR sales prompt below.
+ *
+ * Locales other than pt-BR intentionally fall back — the preset prompts are
+ * pt-BR-authored. Adding an en-US preset later would extend this logic.
+ */
+function resolveBriefingSystemPrompt(): string {
+  const preset = getActivePreset();
+  if (preset && preset.locale === 'pt-BR' && preset.aiBriefingPrompt) {
+    return preset.aiBriefingPrompt;
+  }
+  return DEFAULT_BRIEFING_SYSTEM_PROMPT;
+}
+
+const DEFAULT_BRIEFING_SYSTEM_PROMPT = `Você é um assistente de vendas brasileiro especializado em preparar briefings pré-conversa.
 
 IMPORTANTE: TODO o conteúdo gerado DEVE estar em PORTUGUÊS BRASILEIRO. Não use inglês em nenhuma parte da resposta.
 
@@ -370,7 +390,7 @@ INSTRUÇÕES FINAIS:
         name: 'MeetingBriefing',
         description: 'Briefing estruturado pré-conversa com status BANT e recomendações',
       }),
-      system: BRIEFING_SYSTEM_PROMPT,
+      system: resolveBriefingSystemPrompt(),
       prompt,
       maxRetries: 2,
     });

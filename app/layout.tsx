@@ -3,12 +3,17 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { ServiceWorkerRegister } from '@/components/pwa/ServiceWorkerRegister'
 import { InstallBanner } from '@/components/pwa/InstallBanner'
+import { BrandingStyle } from '@/components/branding/BrandingStyle'
+import { branding } from '@/config/branding'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 export const metadata: Metadata = {
-  title: 'NossoCRM',
-  description: 'CRM Inteligente para Gestão de Vendas',
+  title: branding.brandName,
+  description: `${branding.brandName} — CRM Inteligente para Gestão de Vendas`,
+  icons: {
+    icon: branding.favicon,
+  },
 }
 
 /**
@@ -29,6 +34,9 @@ export default function RootLayout({
   return (
     // suppressHydrationWarning: necessário porque a classe "dark" é aplicada no servidor mas pode ser sobrescrita por tema do sistema no cliente
     <html lang="pt-BR" className="dark" suppressHydrationWarning>
+      <head>
+        <BrandingStyle />
+      </head>
       <body className={`${inter.variable} font-sans antialiased bg-[var(--color-bg)] text-[var(--color-text-primary)]`}>
         <ServiceWorkerRegister />
         <InstallBanner />
