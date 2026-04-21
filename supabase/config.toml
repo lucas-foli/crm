@@ -95,3 +95,6 @@ enabled = false
 # portanto desabilitamos a verificação de JWT.
 [functions.webhook-in]
 verify_jwt = false
+
+[functions.messaging-webhook-meta]
+verify_jwt = false
