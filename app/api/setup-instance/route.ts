@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createStaticAdminClient } from '@/lib/supabase/server';
 import { isAllowedOrigin } from '@/lib/security/sameOrigin';
+import { getActivePreset } from '@/lib/presets';
 
 function json<T>(body: T, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -16,6 +17,71 @@ const SetupSchema = z
     password: z.string().min(6),
   })
   .strict();
+
+type AdminClient = ReturnType<typeof createStaticAdminClient>;
+
+/**
+ * Idempotently seed a default board + preset pipeline stages for a freshly
+ * created organization, when `VERTICAL_PRESET` selects a known vertical.
+ *
+ * Safe to call repeatedly — returns early if a default board with the preset
+ * key already exists for the org.
+ *
+ * Non-fatal: seed errors are logged but do NOT fail setup.
+ */
+async function seedVerticalPreset(admin: AdminClient, organizationId: string): Promise<void> {
+  const preset = getActivePreset();
+  if (!preset) return;
+
+  try {
+    // Idempotency: if a board with this key already exists for the org, skip.
+    const { data: existing } = await admin
+      .from('boards')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('key', preset.defaultBoard.key)
+      .maybeSingle();
+
+    if (existing) {
+      return;
+    }
+
+    const { data: board, error: boardErr } = await admin
+      .from('boards')
+      .insert({
+        organization_id: organizationId,
+        key: preset.defaultBoard.key,
+        name: preset.defaultBoard.name,
+        type: preset.defaultBoard.type,
+        is_default: preset.defaultBoard.isDefault,
+        template: preset.id,
+      })
+      .select('id')
+      .single();
+
+    if (boardErr || !board) {
+      console.warn('[preset] Failed to create default board:', boardErr);
+      return;
+    }
+
+    const stageRows = preset.pipelineStages.map((s) => ({
+      board_id: board.id,
+      organization_id: organizationId,
+      name: s.name,
+      label: s.name,
+      color: s.color,
+      order: s.order,
+      is_default: s.isDefault === true,
+    }));
+
+    const { error: stagesErr } = await admin.from('board_stages').insert(stageRows);
+    if (stagesErr) {
+      console.warn('[preset] Failed to seed stages:', stagesErr);
+    }
+  } catch (err) {
+    console.warn('[preset] Seed failed (non-fatal):', err);
+  }
+}
 
 /**
  * Handler HTTP `POST` deste endpoint (Next.js Route Handler).
@@ -87,6 +153,9 @@ export async function POST(req: Request) {
     await admin.from('organizations').delete().eq('id', organization.id);
     return json({ error: profileError.message }, 400);
   }
+
+  // Seed vertical preset (idempotent, non-fatal). Runs after org + admin exist.
+  await seedVerticalPreset(admin, organization.id);
 
   return json({ ok: true, organization, user: { id: userId, email } }, 201);
 }
