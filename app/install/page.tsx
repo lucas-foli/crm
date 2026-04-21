@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -8,45 +8,77 @@ import { motion } from 'framer-motion';
 const STORAGE_TOKEN = 'crm_install_token';
 const STORAGE_PROJECT = 'crm_install_project';
 
+type GateState = 'loading' | 'not-found' | 'allowed';
+
 /**
  * Componente React `InstallEntryPage`.
+ *
+ * Default-deny: se o servidor disser `allowed: false` (ou erro de rede), renderiza um
+ * 404 silencioso — sem redirects que vazam a existência da rota de instalação.
  * @returns {Element} Retorna um valor do tipo `Element`.
  */
 export default function InstallEntryPage() {
   const router = useRouter();
+  const [gate, setGate] = useState<GateState>('loading');
 
   useEffect(() => {
     let cancelled = false;
-    
-    // Verifica se a instância já está inicializada (bloqueia acesso após instalação)
+
     (async () => {
       try {
-        const res = await fetch('/api/installer/check-initialized', { cache: 'no-store' });
-        const data = await res.json();
-        if (!cancelled && data?.initialized === true) {
-          // Instância já inicializada: redireciona para dashboard
-          router.replace('/dashboard');
+        // O token (se configurado) deve vir na query da URL do operador.
+        const url = new URL(window.location.href);
+        const token = url.searchParams.get('token') || '';
+
+        const res = await fetch(
+          `/api/installer/check-initialized${token ? `?token=${encodeURIComponent(token)}` : ''}`,
+          {
+            cache: 'no-store',
+            headers: token ? { 'x-installer-token': token } : undefined,
+          }
+        );
+        const data = await res.json().catch(() => ({}));
+
+        if (cancelled) return;
+
+        // Default-deny: qualquer resposta diferente de `allowed: true` vira 404.
+        if (data?.allowed !== true || data?.initialized === true) {
+          setGate('not-found');
           return;
         }
-      } catch (err) {
-        // Fail-safe: em caso de erro, não bloqueia o acesso ao wizard
-        console.warn('[install] Error checking initialization:', err);
-      }
-      
-      // Se não está inicializada, continua com o fluxo normal
-      if (!cancelled) {
-        const token = localStorage.getItem(STORAGE_TOKEN);
-        const project = localStorage.getItem(STORAGE_PROJECT);
-        if (token && project) {
+
+        const storedToken = localStorage.getItem(STORAGE_TOKEN);
+        const storedProject = localStorage.getItem(STORAGE_PROJECT);
+        if (storedToken && storedProject) {
           router.replace('/install/wizard');
         } else {
           router.replace('/install/start');
         }
+      } catch (err) {
+        if (!cancelled) {
+          // Fail-closed: erro de rede/servidor => 404 silencioso.
+          console.warn('[install] Error checking initialization:', err);
+          setGate('not-found');
+        }
       }
     })();
-    
+
     return () => { cancelled = true; };
   }, [router]);
+
+  if (gate === 'not-found') {
+    // Renderiza um 404 silencioso sem pistas sobre a existência do wizard.
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-dark-bg flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-6xl font-bold text-slate-400 dark:text-slate-600">404</h1>
+          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+            This page could not be found.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-dark-bg flex items-center justify-center relative overflow-hidden">
